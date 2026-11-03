@@ -157,3 +157,9 @@ export const PersonaSchema = z.object({
 });
 
 export type Persona = z.infer<typeof PersonaSchema>;
+
+export const ScaffoldSchema = z.object({
+  scaffold: z.string(),
+});
+
+export type Scaffold = z.infer<typeof ScaffoldSchema>;

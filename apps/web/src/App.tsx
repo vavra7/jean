@@ -6,16 +6,24 @@ import {
   ModelListSchema,
   MessageListSchema,
   PersonaSchema,
+  ScaffoldSchema,
   ThreadListSchema,
 } from "@jean/shared";
-import type { AuthMe, Invite, Message, Model, Persona, Thread } from "@jean/shared";
+import type { AuthMe, Invite, Message, Model, Persona, Scaffold, Thread } from "@jean/shared";
 
-type Route = "/login" | "/chat" | "/invite" | "/admin/invites" | "/persona";
+type Route =
+  | "/login"
+  | "/chat"
+  | "/invite"
+  | "/admin/invites"
+  | "/admin/scaffold"
+  | "/persona";
 
 function routeOf(pathname: string): Route {
   if (pathname === "/login") return "/login";
   if (pathname === "/chat") return "/chat";
   if (pathname === "/admin/invites") return "/admin/invites";
+  if (pathname === "/admin/scaffold") return "/admin/scaffold";
   if (pathname === "/persona") return "/persona";
   if (pathname.startsWith("/invite/")) return "/invite";
   return "/login";
@@ -46,16 +54,18 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [personaDirty, setPersonaDirty] = useState(false);
+  const [scaffoldDirty, setScaffoldDirty] = useState(false);
 
   const navigate = useCallback(
     (to: string) => {
-      if (personaDirty && to !== "/persona") {
-        if (!window.confirm("You have unsaved persona changes. Leave anyway?")) return;
+      const dirty = personaDirty || scaffoldDirty;
+      if (dirty && to !== "/persona" && to !== "/admin/scaffold") {
+        if (!window.confirm("You have unsaved changes. Leave anyway?")) return;
       }
       window.history.pushState({}, "", to);
       setRoute(routeOf(to));
     },
-    [personaDirty],
+    [personaDirty, scaffoldDirty],
   );
 
   useEffect(() => {
@@ -83,6 +93,8 @@ function App() {
           if (current === "/login") {
             navigate("/chat");
           } else if (current === "/admin/invites" && !me.isAdmin) {
+            navigate("/chat");
+          } else if (current === "/admin/scaffold" && !me.isAdmin) {
             navigate("/chat");
           }
           return;
@@ -178,12 +190,28 @@ function App() {
       />
     );
   }
+  if (route === "/admin/scaffold") {
+    if (!user.isAdmin) {
+      navigate("/chat");
+      return <div data-testid="auth-redirect">redirecting to /chat…</div>;
+    }
+    return (
+      <AdminScaffoldView
+        user={user}
+        scaffoldDirty={scaffoldDirty}
+        setScaffoldDirty={setScaffoldDirty}
+        navigate={navigate}
+      />
+    );
+  }
   return (
     <ChatView
       user={user}
       personaDirty={personaDirty}
+      scaffoldDirty={scaffoldDirty}
       onLogout={logout}
       onManageInvites={() => navigate("/admin/invites")}
+      onScaffold={() => navigate("/admin/scaffold")}
       onPersona={() => navigate("/persona")}
     />
   );
@@ -406,20 +434,25 @@ function snapshotResolves(thread: Thread | null, models: Model[]): boolean {
 function ChatView({
   user,
   personaDirty,
+  scaffoldDirty,
   onLogout,
   onManageInvites,
+  onScaffold,
   onPersona,
 }: {
   user: AuthMe;
   personaDirty: boolean;
+  scaffoldDirty: boolean;
   onLogout: () => void;
   onManageInvites: () => void;
+  onScaffold: () => void;
   onPersona: () => void;
 }) {
   const handleLogout = useCallback(async () => {
-    if (personaDirty && !window.confirm("You have unsaved persona changes. Sign out anyway?")) return;
+    const dirty = personaDirty || scaffoldDirty;
+    if (dirty && !window.confirm("You have unsaved changes. Sign out anyway?")) return;
     await onLogout();
-  }, [personaDirty, onLogout]);
+  }, [personaDirty, scaffoldDirty, onLogout]);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -713,9 +746,14 @@ function ChatView({
             </div>
             <div className="actions">
               {user.isAdmin && (
-                <button data-testid="chat-manage-invites" onClick={onManageInvites} className="icon-btn">
-                  Invites
-                </button>
+                <>
+                  <button data-testid="chat-manage-invites" onClick={onManageInvites} className="icon-btn">
+                    Invites
+                  </button>
+                  <button data-testid="chat-scaffold" onClick={onScaffold} className="icon-btn">
+                    Scaffold
+                  </button>
+                </>
               )}
               <button
                 data-testid="chat-persona"
@@ -1071,6 +1109,149 @@ function PersonaView({
           )}
           <button
             data-testid="persona-save"
+            type="submit"
+            disabled={!dirty || saving}
+            className="btn primary"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AdminScaffoldView({
+  user,
+  scaffoldDirty,
+  setScaffoldDirty,
+  navigate,
+}: {
+  user: AuthMe;
+  scaffoldDirty: boolean;
+  setScaffoldDirty: (dirty: boolean) => void;
+  navigate: (to: string) => void;
+}) {
+  const [scaffold, setScaffold] = useState("");
+  const [saved, setSaved] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = scaffold !== saved;
+
+  useEffect(() => {
+    let mounted = true;
+    apiJson("/api/admin/scaffold")
+      .then((data: Scaffold | null) => {
+        if (!mounted) return;
+        const value = data?.scaffold ?? "";
+        setScaffold(value);
+        setSaved(value);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : "Failed to load scaffold.");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Reset the dirty flag when leaving the page so a confirmed discard
+  // doesn't block later navigation.
+  useEffect(() => {
+    return () => {
+      setScaffoldDirty(false);
+    };
+  }, [setScaffoldDirty]);
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setError(null);
+      setScaffold(e.target.value);
+    },
+    [],
+  );
+
+  const handleSave = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/scaffold", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ScaffoldSchema.parse({ scaffold })),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? "Failed to save scaffold.");
+        return;
+      }
+      setSaved(scaffold);
+      setScaffoldDirty(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save scaffold.");
+    } finally {
+      setSaving(false);
+    }
+  }, [scaffold, setScaffoldDirty]);
+
+  // Warn before discarding unsaved edits on refresh / tab close.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [dirty]);
+
+  const handleBack = useCallback(() => {
+    navigate("/chat");
+  }, [navigate]);
+
+  // Sample values used for the live preview, mirroring the server's placeholders.
+  const today = new Date().toISOString().slice(0, 10);
+  const preview = scaffold
+    .replace(/\{\{display_name\}\}/g, "Alex")
+    .replace(/\{\{date\}\}/g, today);
+
+  return (
+    <div className="page" data-testid="admin-scaffold-page">
+      <h1 data-testid="admin-scaffold-heading">Scaffold</h1>
+      <p>{`The Scaffold precedes every Persona in the system prompt on each request. {{display_name}} and {{date}} are rendered per request; unknown placeholders are left as-is.`}</p>
+      {error && <div data-testid="admin-scaffold-error">{error}</div>}
+      <form data-testid="admin-scaffold-form" onSubmit={handleSave} className="form">
+        <div className="field">
+          <label>Scaffold</label>
+          <textarea
+            data-testid="admin-scaffold-textarea"
+            value={scaffold}
+            onChange={handleChange}
+            rows={16}
+            style={{ width: "100%", minHeight: 260 }}
+          />
+        </div>
+        <div className="field preview">
+          <label>Preview (as Alex, {today})</label>
+          <pre data-testid="admin-scaffold-preview">{preview}</pre>
+        </div>
+        <div className="actions">
+          <button data-testid="admin-scaffold-back" onClick={handleBack} className="btn">
+            Back to chat
+          </button>
+          {dirty && (
+            <span data-testid="admin-scaffold-dirty" className="muted">
+              unsaved changes
+            </span>
+          )}
+          <button
+            data-testid="admin-scaffold-save"
             type="submit"
             disabled={!dirty || saving}
             className="btn primary"

@@ -11,6 +11,7 @@ import { registerModelsRoutes } from "./routes/models.js";
 import { registerThreadsRoutes } from "./routes/threads.js";
 import { registerMessagesRoutes } from "./routes/messages.js";
 import { registerPersonaRoutes } from "./routes/persona.js";
+import { registerScaffoldRoutes } from "./routes/scaffold.js";
 import fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 
@@ -26,6 +27,7 @@ registerModelsRoutes(app);
 registerThreadsRoutes(app);
 registerMessagesRoutes(app);
 registerPersonaRoutes(app);
+registerScaffoldRoutes(app);
 
 await migrate();
 await seedAdmin();
