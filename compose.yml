@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: jean
+      POSTGRES_PASSWORD: jean
+      POSTGRES_DB: jean
+    ports:
+      - "5432:5432"
+    volumes:
+      - jean_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jean -d jean"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
+volumes:
+  jean_postgres_data:

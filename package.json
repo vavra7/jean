@@ -1,0 +1,17 @@
+{
+  "name": "jean",
+  "private": true,
+  "description": "Personal chat agent — walking skeleton",
+  "scripts": {
+    "dev": "pnpm build:shared && pnpm --filter api dev & pnpm --filter web dev && wait",
+    "test": "pnpm build:shared && vitest run",
+    "typecheck": "pnpm build:shared && tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
+    "build:shared": "pnpm --filter shared build",
+    "db:up": "docker compose up -d postgres"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.7",
+    "vitest": "^3.0"
+  }
+}
