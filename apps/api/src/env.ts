@@ -29,3 +29,8 @@ export function loadEnv(): Env {
 
   return result.data;
 }
+
+/** Load env lazily so callers imported before dotenv.config() still see .env values. */
+export function getEnv(): Env {
+  return loadEnv();
+}
