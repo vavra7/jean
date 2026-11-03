@@ -85,7 +85,7 @@ export function registerThreadsRoutes(app: FastifyInstance): void {
          RETURNING id, title, selected_provider, selected_external_model_id, created_at, updated_at`,
         [
           auth.user.id,
-          title ?? null,
+          title ?? "New chat",
           snapshot.last_model_provider ?? null,
           snapshot.last_model_external_id ?? null,
         ],
