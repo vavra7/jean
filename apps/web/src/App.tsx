@@ -8,8 +8,18 @@ import {
   PersonaSchema,
   ScaffoldSchema,
   ThreadListSchema,
+  UserListSchema,
 } from "@jean/shared";
-import type { AuthMe, Invite, Message, Model, Persona, Scaffold, Thread } from "@jean/shared";
+import type {
+  AuthMe,
+  Invite,
+  Message,
+  Model,
+  Persona,
+  Scaffold,
+  Thread,
+  User,
+} from "@jean/shared";
 
 type Route =
   | "/login"
@@ -17,6 +27,7 @@ type Route =
   | "/invite"
   | "/admin/invites"
   | "/admin/scaffold"
+  | "/admin/users"
   | "/persona";
 
 function routeOf(pathname: string): Route {
@@ -24,6 +35,7 @@ function routeOf(pathname: string): Route {
   if (pathname === "/chat") return "/chat";
   if (pathname === "/admin/invites") return "/admin/invites";
   if (pathname === "/admin/scaffold") return "/admin/scaffold";
+  if (pathname === "/admin/users") return "/admin/users";
   if (pathname === "/persona") return "/persona";
   if (pathname.startsWith("/invite/")) return "/invite";
   return "/login";
@@ -95,6 +107,8 @@ function App() {
           } else if (current === "/admin/invites" && !me.isAdmin) {
             navigate("/chat");
           } else if (current === "/admin/scaffold" && !me.isAdmin) {
+            navigate("/chat");
+          } else if (current === "/admin/users" && !me.isAdmin) {
             navigate("/chat");
           }
           return;
@@ -204,6 +218,13 @@ function App() {
       />
     );
   }
+  if (route === "/admin/users") {
+    if (!user.isAdmin) {
+      navigate("/chat");
+      return <div data-testid="auth-redirect">redirecting to /chat…</div>;
+    }
+    return <AdminUsersView onLogout={logout} currentUserId={user.id} />;
+  }
   return (
     <ChatView
       user={user}
@@ -211,6 +232,7 @@ function App() {
       scaffoldDirty={scaffoldDirty}
       onLogout={logout}
       onManageInvites={() => navigate("/admin/invites")}
+      onManageUsers={() => navigate("/admin/users")}
       onScaffold={() => navigate("/admin/scaffold")}
       onPersona={() => navigate("/persona")}
     />
@@ -437,6 +459,7 @@ function ChatView({
   scaffoldDirty,
   onLogout,
   onManageInvites,
+  onManageUsers,
   onScaffold,
   onPersona,
 }: {
@@ -445,6 +468,7 @@ function ChatView({
   scaffoldDirty: boolean;
   onLogout: () => void;
   onManageInvites: () => void;
+  onManageUsers: () => void;
   onScaffold: () => void;
   onPersona: () => void;
 }) {
@@ -752,6 +776,9 @@ function ChatView({
                   </button>
                   <button data-testid="chat-scaffold" onClick={onScaffold} className="icon-btn">
                     Scaffold
+                  </button>
+                  <button data-testid="chat-manage-users" onClick={onManageUsers} className="icon-btn">
+                    Users
                   </button>
                 </>
               )}
@@ -1260,6 +1287,143 @@ function AdminScaffoldView({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function AdminUsersView({
+  onLogout,
+  currentUserId,
+}: {
+  onLogout: () => void;
+  currentUserId: string;
+}) {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmInput, setConfirmInput] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    fetch("/api/admin/users", { credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("failed to load users");
+        return UserListSchema.parse(await res.json());
+      })
+      .then((data) => {
+        if (!mounted) return;
+        setUsers(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setError("Failed to load users.");
+        setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const target = users.find((u) => u.id === confirmingId);
+  const confirmed = !!target && confirmInput === target.email;
+
+  const handleDelete = (id: string) => {
+    setConfirmingId(id);
+    setConfirmInput("");
+  };
+
+  const handleCancel = () => {
+    setConfirmingId(null);
+    setConfirmInput("");
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmingId || !confirmed) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${confirmingId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? "Failed to delete user.");
+        return;
+      }
+      setUsers((prev) => prev.filter((u) => u.id !== confirmingId));
+      setConfirmingId(null);
+      setConfirmInput("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete user.");
+    } finally {
+      setConfirmingId(null);
+      setConfirmInput("");
+    }
+  };
+
+  return (
+    <div className="page" data-testid="admin-users-page">
+      <h1 data-testid="admin-users-heading">Users</h1>
+      <button data-testid="admin-logout" onClick={onLogout} className="btn" style={{ marginBottom: 12 }}>
+        Sign out
+      </button>
+      {error && <div data-testid="admin-users-error">{error}</div>}
+      {loading ? (
+        <div data-testid="admin-users-loading">Loading…</div>
+      ) : (
+        <ul data-testid="admin-user-list">
+          {users.map((u) => (
+            <li key={u.id} data-testid="admin-user-row">
+              {u.email} — {u.displayName ?? "(no display name)"} —
+              {u.isAdmin ? "admin" : "user"} —{" "}
+              {new Date(u.createdAt).toLocaleString()}
+              {u.id === currentUserId ? (
+                <span data-testid="admin-user-self"> (you)</span>
+              ) : (
+                <>
+                  <button
+                    data-testid="admin-user-delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(u.id);
+                    }}
+                    className="delete-btn"
+                  >
+                    delete
+                  </button>
+                  {confirmingId === u.id && (
+                    <div data-testid="admin-user-confirm" className="confirm">
+                      Type <strong>{u.email}</strong> to confirm:
+                      <input
+                        data-testid="admin-user-confirm-input"
+                        value={confirmInput}
+                        onChange={(e) => setConfirmInput(e.target.value)}
+                      />
+                      <button
+                        data-testid="admin-user-confirm-submit"
+                        onClick={handleConfirm}
+                        disabled={!confirmed}
+                        className="btn primary"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        data-testid="admin-user-confirm-cancel"
+                        onClick={handleCancel}
+                        className="btn"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

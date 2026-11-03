@@ -12,6 +12,7 @@ import { registerThreadsRoutes } from "./routes/threads.js";
 import { registerMessagesRoutes } from "./routes/messages.js";
 import { registerPersonaRoutes } from "./routes/persona.js";
 import { registerScaffoldRoutes } from "./routes/scaffold.js";
+import { registerAdminUsersRoutes } from "./routes/admin-users.js";
 import fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 
@@ -28,6 +29,7 @@ registerThreadsRoutes(app);
 registerMessagesRoutes(app);
 registerPersonaRoutes(app);
 registerScaffoldRoutes(app);
+registerAdminUsersRoutes(app);
 
 await migrate();
 await seedAdmin();

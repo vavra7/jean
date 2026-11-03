@@ -4,7 +4,10 @@
 
 **Blocked by:** 03 (Invites)
 
-**Status:** ready-for-agent
+**Status:** resolved
+
+## Answer
+Implemented `GET /api/admin/users` (lists email, displayName, isAdmin, createdAt; non-admin 403) and `DELETE /api/admin/users/:id` (cascades threads/messages/persona/sessions via ON DELETE CASCADE, marks the deleted user's invites used with creator cleared, blocks self-delete with 403). Added `AdminUsersView` with a typed-confirm delete (type the email). Verified with unit + integration tests; typecheck and full suite (107 tests) pass.
 
 - [ ] `GET /admin/users` lists email, display name, admin flag and creation date; non-Admin returns 403
 - [ ] The admin users page shows that list with a typed-confirm delete

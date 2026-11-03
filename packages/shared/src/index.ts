@@ -158,6 +158,19 @@ export const PersonaSchema = z.object({
 
 export type Persona = z.infer<typeof PersonaSchema>;
 
+export const UserSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string(),
+  displayName: z.string().nullable(),
+  isAdmin: z.boolean(),
+  createdAt: z.preprocess((v) => (v instanceof Date ? v.toISOString() : v), z.string().datetime()),
+});
+
+export type User = z.infer<typeof UserSchema>;
+
+export const UserListSchema = z.array(UserSchema);
+export type UserList = z.infer<typeof UserListSchema>;
+
 export const ScaffoldSchema = z.object({
   scaffold: z.string(),
 });
