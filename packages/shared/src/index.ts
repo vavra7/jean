@@ -151,3 +151,9 @@ export const AcceptInviteSchema = z.object({
 });
 
 export type AcceptInvite = z.infer<typeof AcceptInviteSchema>;
+
+export const PersonaSchema = z.object({
+  content: z.string(),
+});
+
+export type Persona = z.infer<typeof PersonaSchema>;

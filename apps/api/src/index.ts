@@ -10,6 +10,7 @@ import { registerHealth } from "./routes/health.js";
 import { registerModelsRoutes } from "./routes/models.js";
 import { registerThreadsRoutes } from "./routes/threads.js";
 import { registerMessagesRoutes } from "./routes/messages.js";
+import { registerPersonaRoutes } from "./routes/persona.js";
 import fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 
@@ -24,6 +25,7 @@ registerInvitesRoutes(app);
 registerModelsRoutes(app);
 registerThreadsRoutes(app);
 registerMessagesRoutes(app);
+registerPersonaRoutes(app);
 
 await migrate();
 await seedAdmin();

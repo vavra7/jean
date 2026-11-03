@@ -5,16 +5,18 @@ import {
   InviteListSchema,
   ModelListSchema,
   MessageListSchema,
+  PersonaSchema,
   ThreadListSchema,
 } from "@jean/shared";
-import type { AuthMe, Invite, Message, Model, Thread } from "@jean/shared";
+import type { AuthMe, Invite, Message, Model, Persona, Thread } from "@jean/shared";
 
-type Route = "/login" | "/chat" | "/invite" | "/admin/invites";
+type Route = "/login" | "/chat" | "/invite" | "/admin/invites" | "/persona";
 
 function routeOf(pathname: string): Route {
   if (pathname === "/login") return "/login";
   if (pathname === "/chat") return "/chat";
   if (pathname === "/admin/invites") return "/admin/invites";
+  if (pathname === "/persona") return "/persona";
   if (pathname.startsWith("/invite/")) return "/invite";
   return "/login";
 }
@@ -43,11 +45,18 @@ function App() {
   const [route, setRoute] = useState<Route>("/login");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [personaDirty, setPersonaDirty] = useState(false);
 
-  const navigate = useCallback((to: string) => {
-    window.history.pushState({}, "", to);
-    setRoute(routeOf(to));
-  }, []);
+  const navigate = useCallback(
+    (to: string) => {
+      if (personaDirty && to !== "/persona") {
+        if (!window.confirm("You have unsaved persona changes. Leave anyway?")) return;
+      }
+      window.history.pushState({}, "", to);
+      setRoute(routeOf(to));
+    },
+    [personaDirty],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -119,8 +128,11 @@ function App() {
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     setUser(null);
-    navigate("/login");
-  }, [navigate]);
+    // Sign out is terminal: the caller (ChatView) already confirms discards
+    // when the Persona is dirty, so navigate's dirty guard is skipped here.
+    window.history.pushState({}, "", "/login");
+    setRoute("/login");
+  }, []);
 
   if (loading) {
     return <div data-testid="auth-loading">loading…</div>;
@@ -156,7 +168,25 @@ function App() {
     }
     return <AdminInvitesView onLogout={logout} />;
   }
-  return <ChatView user={user} onLogout={logout} onManageInvites={() => navigate("/admin/invites")} />;
+  if (route === "/persona") {
+    return (
+      <PersonaView
+        user={user}
+        personaDirty={personaDirty}
+        setPersonaDirty={setPersonaDirty}
+        navigate={navigate}
+      />
+    );
+  }
+  return (
+    <ChatView
+      user={user}
+      personaDirty={personaDirty}
+      onLogout={logout}
+      onManageInvites={() => navigate("/admin/invites")}
+      onPersona={() => navigate("/persona")}
+    />
+  );
 }
 
 function LoginView({
@@ -375,13 +405,21 @@ function snapshotResolves(thread: Thread | null, models: Model[]): boolean {
 
 function ChatView({
   user,
+  personaDirty,
   onLogout,
   onManageInvites,
+  onPersona,
 }: {
   user: AuthMe;
+  personaDirty: boolean;
   onLogout: () => void;
   onManageInvites: () => void;
+  onPersona: () => void;
 }) {
+  const handleLogout = useCallback(async () => {
+    if (personaDirty && !window.confirm("You have unsaved persona changes. Sign out anyway?")) return;
+    await onLogout();
+  }, [personaDirty, onLogout]);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -680,8 +718,15 @@ function ChatView({
                 </button>
               )}
               <button
+                data-testid="chat-persona"
+                onClick={onPersona}
+                className="icon-btn"
+              >
+                Persona
+              </button>
+              <button
                 data-testid="chat-logout"
-                onClick={onLogout}
+                onClick={handleLogout}
                 className="icon-btn"
               >
                 Sign out
@@ -898,6 +943,142 @@ function AdminInvitesView({ onLogout }: { onLogout: () => void }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function PersonaView({
+  user,
+  personaDirty,
+  setPersonaDirty,
+  navigate,
+}: {
+  user: AuthMe;
+  personaDirty: boolean;
+  setPersonaDirty: (dirty: boolean) => void;
+  navigate: (to: string) => void;
+}) {
+  const [content, setContent] = useState("");
+  const [saved, setSaved] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = content !== saved;
+
+  useEffect(() => {
+    let mounted = true;
+    apiJson("/api/persona")
+      .then((data: Persona | null) => {
+        if (!mounted) return;
+        const value = data?.content ?? "";
+        setContent(value);
+        setSaved(value);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : "Failed to load persona.");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Reset the dirty flag when leaving the page so a confirmed discard
+  // doesn't block later navigation.
+  useEffect(() => {
+    return () => {
+      setPersonaDirty(false);
+    };
+  }, [setPersonaDirty]);
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setError(null);
+      setContent(e.target.value);
+    },
+    [],
+  );
+
+  const handleSave = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/persona", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(PersonaSchema.parse({ content })),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? "Failed to save persona.");
+        return;
+      }
+      setSaved(content);
+      setPersonaDirty(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save persona.");
+    } finally {
+      setSaving(false);
+    }
+  }, [content, setPersonaDirty]);
+
+  // Warn before discarding unsaved edits on refresh / tab close.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [dirty]);
+
+  const handleBack = useCallback(() => {
+    navigate("/chat");
+  }, [navigate]);
+
+  return (
+    <div className="page" data-testid="persona-page">
+      <h1 data-testid="persona-heading">Persona</h1>
+      <p>
+        Your Persona is appended to the system prompt on every request and
+        shapes Jean's replies. It is never shown in the chat transcript.
+      </p>
+      {error && <div data-testid="persona-error">{error}</div>}
+      <form data-testid="persona-form" onSubmit={handleSave} className="form">
+        <div className="field">
+          <label>Persona</label>
+          <textarea
+            data-testid="persona-textarea"
+            value={content}
+            onChange={handleChange}
+            rows={16}
+            style={{ width: "100%", minHeight: 260 }}
+          />
+        </div>
+        <div className="actions">
+          <button data-testid="persona-back" onClick={handleBack} className="btn">
+            Back to chat
+          </button>
+          {dirty && (
+            <span data-testid="persona-dirty" className="muted">
+              unsaved changes
+            </span>
+          )}
+          <button
+            data-testid="persona-save"
+            type="submit"
+            disabled={!dirty || saving}
+            className="btn primary"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

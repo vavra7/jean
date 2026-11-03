@@ -187,10 +187,12 @@ describe("integration: threads and model snapshots", () => {
     expect(createRes.statusCode).toBe(201);
     const threadId = JSON.parse(createRes.payload).id;
 
+    const base = Date.now() / 1000;
     await pool.query(
-      `INSERT INTO messages (thread_id, role, content, model)
-       VALUES ($1, 'user', 'hi', NULL), ($1, 'assistant', 'yo', 'ollama/llama3')`,
-      [threadId],
+      `INSERT INTO messages (thread_id, role, content, model, created_at)
+       VALUES ($1, 'user', 'hi', NULL, to_timestamp($2)),
+              ($1, 'assistant', 'yo', 'ollama/llama3', to_timestamp($3))`,
+      [threadId, base, base + 1],
     );
 
     // Deleting the Model must not alter history.
