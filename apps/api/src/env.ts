@@ -10,6 +10,7 @@ export const envSchema = z.object({
   OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434"),
   PUBLIC_ORIGIN: z.string().url().default("http://localhost:5173"),
   PORT: z.string().regex(/^\d+$/).default("3000"),
+  HOST: z.string().default("127.0.0.1"),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -35,6 +35,6 @@ await migrate();
 await seedAdmin();
 await seedDefaultScaffold();
 
-await app.listen({ port: Number(env.PORT), host: "127.0.0.1" });
+await app.listen({ port: Number(env.PORT), host: env.HOST });
 
-console.log(`[api] listening on http://127.0.0.1:${env.PORT}`);
+console.log(`[api] listening on http://${env.HOST}:${env.PORT}`);
