@@ -11,7 +11,7 @@ import { getPool } from "./db/index.js";
 import { getEnv } from "./env.js";
 import { AuthMeSchema } from "@jean/shared";
 
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface AuthedRequest {
   user: {
@@ -22,7 +22,7 @@ export interface AuthedRequest {
   };
 }
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHmac("sha256", getEnv().SESSION_SECRET).update(token).digest("hex");
 }
 
@@ -124,7 +124,7 @@ export async function requireAdminHandler(
   return { user: result.user };
 }
 
-function publicOrigin(): string {
+export function publicOrigin(): string {
   return new URL(getEnv().PUBLIC_ORIGIN).origin;
 }
 

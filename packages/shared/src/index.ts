@@ -108,3 +108,46 @@ export const AuthMeSchema = z.object({
 });
 
 export type AuthMe = z.infer<typeof AuthMeSchema>;
+
+export const InviteSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string(),
+  expiresAt: z.preprocess((v) => (v instanceof Date ? v.toISOString() : v), z.string().datetime()),
+  usedAt: z.preprocess(
+    (v) => (v === null ? null : v instanceof Date ? v.toISOString() : v),
+    z.string().datetime().nullable(),
+  ),
+  used: z.boolean(),
+});
+
+export type Invite = z.infer<typeof InviteSchema>;
+
+export const InviteListSchema = z.array(InviteSchema);
+export type InviteList = z.infer<typeof InviteListSchema>;
+
+export const CreateInviteSchema = z.object({
+  email: z.string().email(),
+});
+
+export type CreateInvite = z.infer<typeof CreateInviteSchema>;
+
+export const CreateInviteResponseSchema = z.object({
+  url: z.string().url(),
+  email: z.string(),
+  expiresAt: z.preprocess((v) => (v instanceof Date ? v.toISOString() : v), z.string().datetime()),
+});
+
+export type CreateInviteResponse = z.infer<typeof CreateInviteResponseSchema>;
+
+export const InviteValidateResponseSchema = z.object({
+  email: z.string(),
+});
+
+export type InviteValidateResponse = z.infer<typeof InviteValidateResponseSchema>;
+
+export const AcceptInviteSchema = z.object({
+  displayName: z.string().min(1),
+  password: z.string().min(8),
+});
+
+export type AcceptInvite = z.infer<typeof AcceptInviteSchema>;
