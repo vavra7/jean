@@ -394,6 +394,7 @@ function ChatView({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [lastBefore, setLastBefore] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const currentThread = threads.find((t) => t.id === currentThreadId) ?? null;
   const canCompose = currentThread ? snapshotResolves(currentThread, models) : false;
@@ -528,12 +529,14 @@ function ChatView({
     setComposerContent("");
     setSending(true);
     setError(null);
+    abortControllerRef.current = new AbortController();
     try {
       const res = await fetch(`/api/threads/${currentThreadId}/messages`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
+        signal: abortControllerRef.current.signal,
       });
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
@@ -588,9 +591,16 @@ function ChatView({
       setLastBefore(null);
       loadMessages(null, false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message.");
+      // A client-initiated Stop: the server already persisted the partial with
+      // interrupted = true. Reload so the partial survives without surfacing an error.
+      if (err instanceof DOMException && err.name === "AbortError") {
+        await loadMessages(null, false);
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to send message.");
+      }
     } finally {
       setSending(false);
+      abortControllerRef.current = null;
     }
   }, [currentThreadId, canCompose, composerContent, currentThread, loadMessages]);
 
@@ -745,7 +755,18 @@ function ChatView({
                     </>
                   )}
                 </div>
-                {sending && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>Streaming…</div>}
+                {sending && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+                  <span style={{ fontSize: 12, color: "#6b7280" }}>Streaming…</span>
+                  <button
+                    data-testid="composer-stop"
+                    onClick={() => abortControllerRef.current?.abort()}
+                    className="btn"
+                  >
+                    Stop
+                  </button>
+                </div>
+              )}
               </div>
             </>
           )}

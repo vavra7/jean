@@ -289,4 +289,131 @@ describe("POST /api/threads/:id/messages (streaming)", () => {
     expect(error).toBeDefined();
     expect(error!.data.message).toBe("model overloaded");
   });
+
+  it("persists partial with interrupted=true when the stream ends without done", async () => {
+    const app = buildApp();
+    await app.ready();
+    // Tokens arrive but the upstream never sends a done event (e.g. client stopped).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        ndjsonBody([
+          JSON.stringify({ message: { content: "hel" } }),
+          JSON.stringify({ message: { content: "lo" } }),
+        ]),
+      ),
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/threads/${threadId}/messages`,
+      cookies: { session: "abc" },
+      body: { content: "x" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const events = parseSSE(res.payload);
+    const done = events.find((e) => e.event === "done");
+    expect(done).toMatchObject({
+      data: { messageId: "msg-assistant-1", interrupted: true },
+    });
+    const assistantInserts = mockQuery.mock.calls.filter(([sql]) =>
+      sql.includes("'assistant'"),
+    );
+    expect(assistantInserts).toHaveLength(1);
+    expect(assistantInserts[0][0]).toContain(", true)");
+    expect(assistantInserts[0][1][1]).toBe("hello");
+    expect(assistantInserts[0][1][2]).toBe("ollama/llama3");
+  });
+
+  it("persists partial then emits error when provider fails after partial text", async () => {
+    const app = buildApp();
+    await app.ready();
+    const reader = {
+      read: vi.fn(),
+      releaseLock: vi.fn(),
+    };
+    reader.read
+      .mockResolvedValueOnce({
+        value: new TextEncoder().encode('{"message":{"content":"hel"}}\n'),
+        done: false,
+      })
+      .mockRejectedValueOnce(new Error("upstream reset"));
+    const fakeResponse = {
+      ok: true,
+      body: { getReader: () => reader },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fakeResponse));
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/threads/${threadId}/messages`,
+      cookies: { session: "abc" },
+      body: { content: "x" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const events = parseSSE(res.payload);
+    const error = events.find((e) => e.event === "error");
+    expect(error).toBeDefined();
+    const assistantInserts = mockQuery.mock.calls.filter(([sql]) =>
+      sql.includes("'assistant'"),
+    );
+    expect(assistantInserts).toHaveLength(1);
+    expect(assistantInserts[0][0]).toContain(", true)");
+    expect(assistantInserts[0][1][1]).toBe("hel");
+    expect(assistantInserts[0][1][2]).toBe("ollama/llama3");
+  });
+
+  it("adds NVIDIA org hint on 404", async () => {
+    const app = buildApp();
+    await app.ready();
+    mockQuery.mockImplementation((sql: string) => {
+      const s = sql.replace(/\s+/g, " ");
+      if (s.includes("token_hash")) {
+        return Promise.resolve({
+          rows: [{ id: userId, email: "a@example.com", display_name: null, is_admin: true, expires_at: new Date().toISOString() }],
+        });
+      }
+      if (s.includes("FROM threads WHERE id = $1")) {
+        return Promise.resolve({
+          rows: [{ id: threadId, user_id: userId, selectedProvider: "nvidia", selectedExternalModelId: "nemotron" }],
+        });
+      }
+      if (s.includes("INSERT INTO messages") && s.includes("'user'")) {
+        return Promise.resolve({ rows: [{ id: "msg-user-1" }] });
+      }
+      if (s.includes("FROM messages WHERE thread_id") && s.includes("ORDER BY")) {
+        return Promise.resolve({ rows: [] });
+      }
+      if (s.includes("FROM app_settings")) {
+        return Promise.resolve({ rows: [{ scaffold: "You are Jean." }] });
+      }
+      if (s.includes("FROM personas")) {
+        return Promise.resolve({ rows: [] });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: "not found" }), { status: 404 }),
+      ),
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/threads/${threadId}/messages`,
+      cookies: { session: "abc" },
+      body: { content: "x" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const events = parseSSE(res.payload);
+    const error = events.find((e) => e.event === "error");
+    expect(error).toBeDefined();
+    expect(error!.data.message).toBe("not found");
+    expect(error!.data.hint).toBe("model not enabled for this NVIDIA org");
+  });
 });
