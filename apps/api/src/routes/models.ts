@@ -16,7 +16,7 @@ import {
 } from "@jean/shared";
 import { buildProviderRegistry } from "../providers/index.js";
 import { getEnv } from "../env.js";
-import { requireAdminHandler } from "../auth.js";
+import { requireAdminHandler, requireAuthHandler } from "../auth.js";
 import { camelizeKeys } from "../lib/camelize.js";
 
 function getRegistry() {
@@ -50,7 +50,7 @@ export function registerModelsRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
-      const auth = await requireAdminHandler(req.cookies);
+      const auth = await requireAuthHandler(req.cookies);
       if ("status" in auth) {
         return reply.status(401).send({ error: "not authenticated" });
       }

@@ -12,6 +12,22 @@ const originalFetch = globalThis.fetch;
 
 const mockQuery = vi.fn();
 
+const ADMIN_USER = {
+  id: "11111111-1111-1111-1111-111111111111",
+  email: "admin@example.com",
+  display_name: null,
+  is_admin: true,
+  expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+};
+
+const NON_ADMIN_USER = { ...ADMIN_USER, email: "user@example.com", is_admin: false };
+
+let sessionUser = ADMIN_USER;
+
+function useSession(user: typeof sessionUser) {
+  sessionUser = user;
+}
+
 vi.mock("../db/index.js", () => ({
   getPool: () => ({ query: mockQuery }),
 }));
@@ -38,18 +54,11 @@ function setValidEnv() {
 beforeEach(() => {
   setValidEnv();
   vi.stubGlobal("fetch", originalFetch);
+  sessionUser = ADMIN_USER;
   mockQuery.mockImplementation((sql: string, params?: unknown[]) => {
     if (sql.includes("sessions")) {
       return Promise.resolve({
-        rows: [
-          {
-            id: "11111111-1111-1111-1111-111111111111",
-            email: "admin@example.com",
-            display_name: null,
-            is_admin: true,
-            expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-          },
-        ],
+        rows: [sessionUser],
       });
     }
     if (sql.includes("INSERT INTO models")) {
@@ -101,6 +110,19 @@ describe("GET /api/models", () => {
     await app.ready();
     const res = await app.inject({ method: "GET", url: "/api/models" });
     expect(res.statusCode).toBe(401);
+  });
+
+  it("returns the model list for a non-admin authenticated user", async () => {
+    const app = buildApp();
+    await app.ready();
+    useSession(NON_ADMIN_USER);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/models",
+      cookies: { session: "abc" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.payload)).toEqual([]);
   });
 });
 
@@ -159,6 +181,19 @@ describe("POST /api/models", () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it("returns 403 for a non-admin user creating a model", async () => {
+    const app = buildApp();
+    await app.ready();
+    useSession(NON_ADMIN_USER);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/models",
+      cookies: { session: "abc" },
+      body: { provider: "ollama", externalModelId: "llama3", label: "my model" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
 });
 
 describe("POST /api/models/test", () => {
@@ -208,5 +243,67 @@ describe("DELETE /api/models/:id", () => {
       cookies: { session: "abc" },
     });
     expect(res.statusCode).toBe(204);
+  });
+
+  it("returns 403 for a non-admin user deleting a model", async () => {
+    const app = buildApp();
+    await app.ready();
+    useSession(NON_ADMIN_USER);
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/models/22222222-2222-2222-2222-222222222222",
+      cookies: { session: "abc" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("GET /api/models/discover", () => {
+  it("returns discovered ollama model ids", async () => {
+    const app = buildApp();
+    await app.ready();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ models: [{ name: "llama3" }, { name: "mistral" }] }),
+      ),
+    );
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/models/discover?provider=ollama",
+      cookies: { session: "abc" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.payload)).toEqual(["llama3", "mistral"]);
+  });
+
+  it("returns an empty list for nvidia (free text, no provider call)", async () => {
+    const app = buildApp();
+    await app.ready();
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/models/discover?provider=nvidia",
+      cookies: { session: "abc" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.payload)).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty list when no provider is given", async () => {
+    const app = buildApp();
+    await app.ready();
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/models/discover",
+      cookies: { session: "abc" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.payload)).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
