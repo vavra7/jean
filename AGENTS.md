@@ -1,0 +1,1 @@
+Be extremely concise ans sacrifice grammar for the sake of concision. Do only what you where asked to and nothing extra.

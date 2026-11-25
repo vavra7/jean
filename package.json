@@ -1,0 +1,12 @@
+{
+  "name": "jean",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @jean/api",
+    "build": "npm run build -w @jean/api",
+    "start": "npm run start -w @jean/api"
+  }
+}
