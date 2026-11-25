@@ -1,3 +1,4 @@
+import './env.js'
 import Fastify from 'fastify'
 import { graph } from './graph.js'
 
@@ -9,7 +10,7 @@ app.post<{ Body: { text: string } }>('/langgraph', async (request) =>
   graph.invoke({ text: request.body.text ?? '' }),
 )
 
-const port = Number(process.env.PORT ?? 3000)
+const port = Number(process.env.PORT)
 
 try {
   await app.listen({ port, host: '0.0.0.0' })
