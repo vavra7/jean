@@ -1,1 +1,10 @@
 GET http://localhost:3000/hello
+
+###
+
+POST http://localhost:3000/langgraph
+Content-Type: application/json
+
+{
+  "text": "hello"
+}
