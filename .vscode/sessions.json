@@ -1,0 +1,38 @@
+{
+  "theme": "default",
+  "active": "default",
+  "activateOnStartup": true,
+  "keepExistingTerminals": false,
+  "sessions": {
+    "default": [
+      {
+        "name": "root",
+        "autoExecuteCommands": false,
+        "color": "terminal.ansiBrightYellow",
+        "commands": []
+      },
+      [
+        {
+          "name": "api:dev",
+          "autoExecuteCommands": true,
+          "color": "terminal.ansiRed",
+          "commands": [
+            "cd ./apps/api",
+            "clear",
+            "npm i",
+            "npm run dev"
+          ]
+        },
+        {
+          "name": "api",
+          "autoExecuteCommands": true,
+          "color": "terminal.ansiRed",
+          "commands": [
+            "cd ./apps/api",
+            "clear"
+          ]
+        }
+      ]
+    ]
+  }
+}

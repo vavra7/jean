@@ -1,0 +1,23 @@
+{
+  "name": "jean-devcontainer",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  "forwardPorts": [5010, 5173],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "js/ts.preferences.importModuleSpecifier": "relative",
+        "parameterHints.hintingType": "variableOnly",
+        "cSpell.language": "en,cs"
+      },
+      "extensions": [
+        "nguyenngoclong.terminal-keeper",
+        "streetsidesoftware.code-spell-checker",
+        "streetsidesoftware.code-spell-checker-czech",
+        "humao.rest-client",
+        "dominicvonk.parameter-hints"
+      ]
+    }
+  }
+}
